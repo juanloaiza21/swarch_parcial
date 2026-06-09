@@ -1,4 +1,4 @@
-# 🛍️ NimbusMarket / UN Store
+# 🛍️ UNMarket
 
 A simple marketplace, split into **two Docker images** (`un_store_front` +
 `un_store_back`) backed by a single SQLite database (`un_store_db`). A hardcoded
