@@ -11,7 +11,7 @@ two products, and the whole thing runs on one SQLite file.
 ```
 ┌─────────────────────────┐        /api/*  (reverse-proxied)        ┌──────────────────────────┐
 │  frontend (image 1)     │  ───────────────────────────────────▶  │  backend (image 2)       │
-│  nginx + static SPA     │                                         │  Node + Express          │
+│  nginx + static SPA     │                                         │  Python · FastAPI        │
 │  port 8080 → 80         │  ◀───────────────────────────────────  │  port 3000  · SQLite     │
 └─────────────────────────┘              JSON responses             └──────────────────────────┘
                                                                               │
@@ -21,8 +21,9 @@ two products, and the whole thing runs on one SQLite file.
 - **frontend/** — vanilla-JS single-page app (hash router, cart in `localStorage`),
   served by nginx. nginx also reverse-proxies `/api` to the backend, so the
   browser never talks to the backend directly — no CORS, no hardcoded host.
-- **backend/** — Express JSON API with a single `better-sqlite3` database file.
+- **backend/** — FastAPI (Python) JSON API with a single SQLite database file.
   Seeds exactly two products and exposes the hardcoded user on first boot.
+  Interactive API docs are available at `/docs` (Swagger UI).
 
 ## Run it (Docker, recommended)
 
@@ -45,7 +46,10 @@ products survive restarts. Remove it with `docker compose down -v`.
 
 ```bash
 # Terminal 1 — backend API on :3000
-cd backend && npm install && npm start
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 3000
 
 # Terminal 2 — serve the frontend however you like, e.g.
 cd frontend/public && python3 -m http.server 8080
@@ -82,12 +86,12 @@ When running the frontend without nginx you'll need to proxy `/api` to
 
 ```
 .
-├── backend/            # Express + SQLite REST API (Docker image 1)
-│   ├── src/
-│   │   ├── config.js       # hardcoded user, paths
-│   │   ├── db.js           # migrations + seed (2 products)
-│   │   ├── repository.js   # data access
-│   │   └── server.js       # REST routes
+├── backend/            # FastAPI + SQLite REST API (Docker image 1)
+│   ├── app/
+│   │   ├── config.py       # hardcoded user, paths
+│   │   ├── database.py     # migrations, seed (2 products), repository
+│   │   └── main.py         # FastAPI app + REST routes
+│   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/           # nginx + vanilla SPA (Docker image 2)
 │   ├── public/
