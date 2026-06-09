@@ -4,13 +4,18 @@ import uuid
 
 _EMAIL = "juan.loaiza@y.uno"
 
-# Stable UUID username derived from the email, so it stays identical across
-# restarts and between the frontend and backend.
-USERNAME = str(uuid.uuid5(uuid.NAMESPACE_DNS, _EMAIL))
+# Human-readable username/handle. This is what we send to the payment
+# processor as sender_id (NOT the UUID).
+USERNAME = _EMAIL.split("@")[0]  # "juan.loaiza"
+
+# Stable UUID identifier derived from the email, identical across restarts
+# and between the frontend and backend.
+USER_UUID = str(uuid.uuid5(uuid.NAMESPACE_DNS, _EMAIL))
 
 # Hardcoded user baked into the app (no auth for this iteration).
 CURRENT_USER = {
     "id": 1,
+    "uuid": USER_UUID,
     "username": USERNAME,
     "name": "Juan Loaiza",
     "email": _EMAIL,
