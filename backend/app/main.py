@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 
 from . import database as db
 from .config import (
+    BROKER_URL,
     CURRENT_USER,
-    EXTERNAL_PAYMENT_URL,
     MERCHANT,
     PAYMENT_TIMEOUT,
 )
@@ -96,38 +96,47 @@ def parse_payment(body: dict[str, Any]) -> tuple[list[str], dict]:
 
 
 async def forward_to_external(payload: dict) -> dict:
-    """POST the payment to the External Payment service over HTTP/REST.
+    """Send the payment to the broker's /queue over HTTP/REST.
 
-    Falls back to a simulated approval when no provider URL is configured,
-    so the end-to-end flow works without an external dependency.
+    The broker contract is exactly {sender_id, receiver_id, amount} and it
+    replies 201 {"id": "..."}. Falls back to a simulated approval when no
+    BROKER_URL is configured, so the flow works without the external service.
     """
     reference = uuid.uuid4().hex[:12].upper()
 
-    if not EXTERNAL_PAYMENT_URL:
+    if not BROKER_URL:
         return {
             "status": "approved",
             "provider": "simulated",
             "reference": reference,
-            "detail": "Simulated payment (no EXTERNAL_PAYMENT_URL configured).",
+            "detail": "Simulated payment (no BROKER_URL configured).",
         }
 
     try:
         async with httpx.AsyncClient(timeout=PAYMENT_TIMEOUT) as client:
-            resp = await client.post(EXTERNAL_PAYMENT_URL, json=payload)
+            resp = await client.post(
+                BROKER_URL,
+                json={
+                    "sender_id": payload["sender_id"],
+                    "receiver_id": payload["receiver_id"],
+                    "amount": payload["amount"],
+                },
+            )
             resp.raise_for_status()
             body = resp.json() if resp.content else {}
+        broker_id = str(body.get("id") or reference)
         return {
-            "status": body.get("status", "approved"),
-            "provider": "external",
-            "reference": str(body.get("reference") or body.get("id") or reference),
-            "detail": body.get("message", "Processed by external payment provider."),
+            "status": "approved",
+            "provider": "broker",
+            "reference": broker_id,
+            "detail": f"Queued at payment broker (id {broker_id}).",
         }
     except Exception as exc:  # network/HTTP errors -> declined, recorded for audit
         return {
             "status": "failed",
-            "provider": "external",
+            "provider": "broker",
             "reference": reference,
-            "detail": f"External payment error: {exc}",
+            "detail": f"Payment broker error: {exc}",
         }
 
 

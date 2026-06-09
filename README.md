@@ -3,7 +3,8 @@
 A simple marketplace, split into **two Docker images** (`un_store_front` +
 `un_store_back`) backed by a single SQLite database (`un_store_db`). A hardcoded
 user (with a UUID username) owns the shop, the catalog is seeded with two
-products, and checkout pays a store via an **External Payment** service.
+products, and checkout submits the payment to an external **payment broker**
+([pasarela-grupo-3](https://github.com/andrefalar/pasarela-grupo-3)).
 
 ## Architecture
 
@@ -16,10 +17,10 @@ products, and checkout pays a store via an **External Payment** service.
 │  nginx + SPA     │ ◀───────────── │  FastAPI (Py)    │                  │  SQLite vol  │
 │  :8080 → 80      │   JSON          │  :3000           │                  └──────────────┘
 └──────────────────┘                └───────┬──────────┘
-                                            │ HTTP/REST  POST {sender_id, receiver_id, amount}
+                                            │ HTTP/REST  POST /queue {sender_id, receiver_id, amount}
                                             ▼
                                    ┌──────────────────┐
-                                   │ External Payment │  (configurable; simulated if unset)
+                                   │  payment broker  │  pasarela-grupo-3 (simulated if unset)
                                    └──────────────────┘
 ```
 
@@ -29,7 +30,7 @@ products, and checkout pays a store via an **External Payment** service.
   hardcoded host.
 - **backend/** (`un_store_back`) — FastAPI (Python) JSON API over a single SQLite
   file. Seeds two products and the hardcoded UUID user, and forwards checkout
-  payments to the External Payment service over HTTP/REST. Swagger UI at `/docs`.
+  payments to the payment broker's `/queue` over HTTP/REST. Swagger UI at `/docs`.
 
 ## Run it (Docker, recommended)
 
@@ -48,14 +49,18 @@ Then open **http://localhost:8080**.
 The SQLite file is persisted in the `un_store_db` Docker volume, so your
 products survive restarts. Remove it with `docker compose down -v`.
 
-### Connecting a real External Payment service
+### Connecting the payment broker
 
 By default, payments are **simulated** (approved locally) so the flow works out
-of the box. To send payments to a real provider, set `EXTERNAL_PAYMENT_URL` —
-`un_store_back` will `POST { sender_id, receiver_id, amount }` to it:
+of the box. To submit real payments, set `BROKER_URL` to the
+[pasarela-grupo-3](https://github.com/andrefalar/pasarela-grupo-3) broker's
+`/queue` endpoint — `un_store_back` will `POST { sender_id, receiver_id, amount }`
+and store the returned broker `id` as the payment reference:
 
 ```bash
-EXTERNAL_PAYMENT_URL=https://payments.example.com/charge docker compose up --build
+# either inline...
+BROKER_URL=http://<broker-ip>:8001/queue docker compose up --build
+# ...or copy .env.example to .env, set BROKER_URL there, then: docker compose up --build
 ```
 
 ## Run locally (no Docker)
@@ -89,7 +94,7 @@ When running the frontend without nginx you'll need to proxy `/api` to
 | GET    | `/api/stats`          | Catalog stats (totals, value)        |
 | GET    | `/api/store`          | The store/merchant (payment receiver)|
 | GET    | `/api/payments`       | Payment/transaction history          |
-| POST   | `/api/payments`       | Pay: `{ sender_id, receiver_id, amount }` → External Payment |
+| POST   | `/api/payments`       | Pay: `{ sender_id, receiver_id, amount }` → broker `/queue` |
 
 ### `POST /api/payments`
 
@@ -97,12 +102,13 @@ When running the frontend without nginx you'll need to proxy `/api` to
 // request
 { "sender_id": "<buyer uuid>", "receiver_id": "<store uuid>", "amount": 239.49 }
 // response (201 approved / 402 declined)
-{ "id": 1, "reference": "EXT-1A2B3C", "sender_id": "...", "receiver_id": "...",
-  "amount": 239.49, "status": "approved", "provider": "external", "created_at": "..." }
+{ "id": 1, "reference": "<broker id>", "sender_id": "...", "receiver_id": "...",
+  "amount": 239.49, "status": "approved", "provider": "broker", "created_at": "..." }
 ```
 
-`receiver_id` is optional and defaults to the store. The request is forwarded to
-the External Payment service and the transaction is recorded in SQLite.
+`receiver_id` is optional and defaults to the store. The request is submitted to
+the broker's `/queue` and the transaction is recorded in SQLite (the broker `id`
+becomes the payment reference).
 
 ## Features
 
@@ -111,7 +117,7 @@ the External Payment service and the transaction is recorded in SQLite.
 - Full product **CRUD** with server-side validation.
 - Search + category filtering.
 - A lightweight cart (client-side) with live badge.
-- **Checkout → External Payment** over HTTP/REST, with a receipt + history.
+- **Checkout → payment broker** `/queue` over HTTP/REST, with a receipt + history.
 - Stock badges (low / sold out), inventory stats, flash messages.
 - Responsive, modern dark UI.
 
@@ -123,7 +129,7 @@ the External Payment service and the transaction is recorded in SQLite.
 │   ├── app/
 │   │   ├── config.py       # hardcoded user (UUID), merchant, payment config
 │   │   ├── database.py     # migrations, seed (2 products), products + payments
-│   │   └── main.py         # FastAPI app, REST routes, External Payment forwarder
+│   │   └── main.py         # FastAPI app, REST routes, payment broker forwarder
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/           # un_store_front — nginx + vanilla SPA

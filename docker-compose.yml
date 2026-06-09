@@ -1,7 +1,7 @@
 # Architecture (per diagram):
 #   Web Browser --HTTP--> un_store_front --HTTP/REST--> un_store_back
 #       un_store_back --DB Connector--> un_store_db (SQLite volume)
-#       un_store_back --HTTP/REST--> External Payment (configurable)
+#       un_store_back --HTTP/REST--> payment broker /queue (pasarela-grupo-3)
 services:
   un_store_back:
     build: ./backend
@@ -10,9 +10,10 @@ services:
     environment:
       PORT: 3000
       DB_PATH: /data/marketplace.db
-      # Point this at the External Payment service. When empty, payments are
-      # simulated so the end-to-end flow still works.
-      EXTERNAL_PAYMENT_URL: ${EXTERNAL_PAYMENT_URL:-}
+      # Point this at the payment broker's /queue endpoint, e.g.
+      # http://<broker-ip>:8001/queue. When empty, payments are simulated so
+      # the end-to-end flow still works.
+      BROKER_URL: ${BROKER_URL:-}
     volumes:
       - un_store_db:/data
     expose:

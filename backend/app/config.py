@@ -31,9 +31,12 @@ MERCHANT = {
 
 PORT = int(os.environ.get("PORT", "3000"))
 
-# External Payment service (un_store_back -> External Payment over HTTP/REST).
+# Payment broker (un_store_back -> broker /queue over HTTP/REST).
+# The shop POSTs {sender_id, receiver_id, amount} to the broker, which queues
+# it; the pasarela later forwards it to the bank. Point this at the broker's
+# /queue endpoint, e.g. http://<broker-ip>:8001/queue.
 # When unset, payments are simulated so the demo flow still works end to end.
-EXTERNAL_PAYMENT_URL = os.environ.get("EXTERNAL_PAYMENT_URL", "")
+BROKER_URL = os.environ.get("BROKER_URL", os.environ.get("EXTERNAL_PAYMENT_URL", ""))
 PAYMENT_TIMEOUT = float(os.environ.get("PAYMENT_TIMEOUT", "8"))
 
 # Single SQLite file. Lives under /data so it can be mounted as a Docker volume.
