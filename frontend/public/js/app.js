@@ -422,12 +422,14 @@ function router() {
 async function boot() {
   try {
     currentUser = await API.getUser();
+    const shortId = (currentUser.username || '').split('-')[0];
     document.getElementById('user-name').textContent = currentUser.name;
-    document.getElementById('user-role').textContent = currentUser.role;
+    document.getElementById('user-id').textContent = currentUser.username ? `#${shortId}` : currentUser.role;
     document.getElementById('user-avatar').textContent = currentUser.avatar;
-    document.getElementById('user-chip').title = currentUser.email;
+    document.getElementById('user-chip').title =
+      `${currentUser.name} · ${currentUser.role}\n${currentUser.username || ''}\n${currentUser.email}`;
     document.getElementById('footer-user').textContent =
-      `Signed in as ${currentUser.name} · SQLite · Express`;
+      `Signed in as ${currentUser.name} (${currentUser.username || currentUser.id}) · FastAPI · SQLite`;
   } catch (_) {
     document.getElementById('user-name').textContent = 'Offline';
   }

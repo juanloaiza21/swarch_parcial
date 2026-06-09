@@ -1,11 +1,19 @@
 """Application configuration and the hardcoded user."""
 import os
+import uuid
+
+_EMAIL = "juan.loaiza@y.uno"
+
+# Stable UUID username derived from the email, so it stays identical across
+# restarts and between the frontend and backend.
+USERNAME = str(uuid.uuid5(uuid.NAMESPACE_DNS, _EMAIL))
 
 # Hardcoded user baked into the app (no auth for this iteration).
 CURRENT_USER = {
     "id": 1,
+    "username": USERNAME,
     "name": "Juan Loaiza",
-    "email": "juan.loaiza@y.uno",
+    "email": _EMAIL,
     "role": "seller",
     "avatar": "JL",
 }

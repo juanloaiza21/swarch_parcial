@@ -81,7 +81,7 @@ a { color: inherit; text-decoration: none; }
 }
 .user-meta { display: flex; flex-direction: column; line-height: 1.1; }
 .user-name { font-weight: 600; font-size: 0.9rem; }
-.user-role { font-size: 0.72rem; color: var(--muted); text-transform: capitalize; }
+.user-id { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.3px; }
 
 /* ---- Flash ---- */
 .flash {
