@@ -1,0 +1,29 @@
+# Two images: a backend REST API (Node + SQLite) and a frontend SPA (nginx).
+services:
+  backend:
+    build: ./backend
+    image: marketplace-backend
+    container_name: marketplace-backend
+    environment:
+      PORT: 3000
+      DB_PATH: /data/marketplace.db
+    volumes:
+      - marketplace-data:/data
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000" # exposed for direct API access / debugging
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: marketplace-frontend
+    container_name: marketplace-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  marketplace-data:
