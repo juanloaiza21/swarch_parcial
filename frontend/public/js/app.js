@@ -335,18 +335,54 @@ async function cartView() {
           <span class="cart-total">${money(total)}</span>
         </div>
         <div class="cart-checkout">
-          <button class="btn btn-primary btn-lg" id="checkout-btn">Checkout</button>
-          <span class="muted">Payments coming soon — checkout is disabled for now.</span>
+          <button class="btn btn-primary btn-lg" id="checkout-btn">Pay ${money(total)}</button>
+          <span class="muted" id="checkout-note">Pays the store via the External Payment service.</span>
         </div>
       </section>`;
 
-    document.getElementById('checkout-btn').addEventListener('click', () => {
-      flash('success', 'Checkout is not wired up yet — payment redirection comes later.');
-      renderFlash();
+    document.getElementById('checkout-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const note = document.getElementById('checkout-note');
+      btn.disabled = true;
+      btn.textContent = 'Processing…';
+      try {
+        const store = await API.getStore();
+        const payment = await API.createPayment({
+          sender_id: currentUser?.username || String(currentUser?.id || ''),
+          receiver_id: store.id,
+          amount: Number(total.toFixed(2)),
+        });
+        Cart.write([]); // empty the cart on success
+        renderReceipt(payment, store);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = `Pay ${money(total)}`;
+        note.innerHTML = `<span class="pay-error">Payment failed: ${escapeHtml(err.message)}</span>`;
+      }
     });
   } catch (err) {
     app.innerHTML = errorView(err.message);
   }
+}
+
+function renderReceipt(payment, store) {
+  const ok = ['approved', 'succeeded', 'paid', 'completed'].includes(payment.status);
+  app.innerHTML = `
+    <section class="receipt">
+      <div class="receipt-icon ${ok ? 'ok' : 'fail'}">${ok ? '✓' : '✕'}</div>
+      <h1>${ok ? 'Payment ' + payment.status : 'Payment ' + payment.status}</h1>
+      <p class="muted">${ok ? 'Thanks! Your order is confirmed.' : escapeHtml(payment.detail || 'The payment was not completed.')}</p>
+      <dl class="receipt-grid">
+        <div><dt>Reference</dt><dd>${escapeHtml(payment.reference)}</dd></div>
+        <div><dt>Amount</dt><dd>${money(payment.amount)}</dd></div>
+        <div><dt>Status</dt><dd class="status-${ok ? 'ok' : 'fail'}">${escapeHtml(payment.status)}</dd></div>
+        <div><dt>Provider</dt><dd>${escapeHtml(payment.provider)}</dd></div>
+        <div><dt>From (sender_id)</dt><dd class="mono">${escapeHtml(payment.sender_id)}</dd></div>
+        <div><dt>To (receiver_id)</dt><dd class="mono">${escapeHtml(payment.receiver_id)} · ${escapeHtml(store?.name || '')}</dd></div>
+      </dl>
+      <a href="#/" class="btn btn-primary btn-lg">Back to storefront</a>
+    </section>`;
+  Cart.refreshBadge();
 }
 
 // ---- Global click handling (event delegation) ---------------------------

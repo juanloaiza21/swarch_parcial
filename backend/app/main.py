@@ -1,12 +1,19 @@
 """FastAPI marketplace REST API (mounted under /api)."""
+import uuid
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import database as db
-from .config import CURRENT_USER
+from .config import (
+    CURRENT_USER,
+    EXTERNAL_PAYMENT_URL,
+    MERCHANT,
+    PAYMENT_TIMEOUT,
+)
 
 app = FastAPI(title="Marketplace API", version="1.0.0")
 
@@ -60,6 +67,70 @@ def parse_product(body: dict[str, Any]) -> tuple[list[str], dict]:
     return errors, data
 
 
+def parse_payment(body: dict[str, Any]) -> tuple[list[str], dict]:
+    """Validate a payment payload: sender_id, receiver_id, amount."""
+    body = body or {}
+    errors: list[str] = []
+    sender_id = str(body.get("sender_id") or "").strip()
+    # receiver_id defaults to the store/merchant when not supplied.
+    receiver_id = str(body.get("receiver_id") or MERCHANT["id"]).strip()
+
+    try:
+        amount = float(body.get("amount"))
+    except (TypeError, ValueError):
+        amount = float("nan")
+
+    if not sender_id:
+        errors.append("sender_id is required.")
+    if not receiver_id:
+        errors.append("receiver_id is required.")
+    if amount != amount or amount <= 0:  # NaN or non-positive
+        errors.append("amount must be a positive number.")
+
+    data = {
+        "sender_id": sender_id,
+        "receiver_id": receiver_id,
+        "amount": 0.0 if amount != amount else round(amount, 2),
+    }
+    return errors, data
+
+
+async def forward_to_external(payload: dict) -> dict:
+    """POST the payment to the External Payment service over HTTP/REST.
+
+    Falls back to a simulated approval when no provider URL is configured,
+    so the end-to-end flow works without an external dependency.
+    """
+    reference = uuid.uuid4().hex[:12].upper()
+
+    if not EXTERNAL_PAYMENT_URL:
+        return {
+            "status": "approved",
+            "provider": "simulated",
+            "reference": reference,
+            "detail": "Simulated payment (no EXTERNAL_PAYMENT_URL configured).",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=PAYMENT_TIMEOUT) as client:
+            resp = await client.post(EXTERNAL_PAYMENT_URL, json=payload)
+            resp.raise_for_status()
+            body = resp.json() if resp.content else {}
+        return {
+            "status": body.get("status", "approved"),
+            "provider": "external",
+            "reference": str(body.get("reference") or body.get("id") or reference),
+            "detail": body.get("message", "Processed by external payment provider."),
+        }
+    except Exception as exc:  # network/HTTP errors -> declined, recorded for audit
+        return {
+            "status": "failed",
+            "provider": "external",
+            "reference": reference,
+            "detail": f"External payment error: {exc}",
+        }
+
+
 router = APIRouter(prefix="/api")
 
 
@@ -71,6 +142,11 @@ def health() -> dict:
 @router.get("/user")
 def user() -> dict:
     return CURRENT_USER
+
+
+@router.get("/store")
+def store() -> dict:
+    return MERCHANT
 
 
 @router.get("/categories")
@@ -124,6 +200,37 @@ def delete_product(product_id: int):
         return JSONResponse(status_code=404, content={"error": "Product not found."})
     db.delete_product(product_id)
     return {"deleted": True, "id": product_id}
+
+
+# ---- Payments (un_store_back -> External Payment) -----------------------
+
+@router.get("/payments")
+def list_payments() -> list[dict]:
+    return db.list_payments()
+
+
+@router.post("/payments")
+async def create_payment(request: Request):
+    body = await _json(request)
+    errors, data = parse_payment(body)
+    if errors:
+        return JSONResponse(status_code=422, content={"errors": errors})
+
+    result = await forward_to_external(data)
+    record = db.create_payment(
+        {
+            "reference": result["reference"],
+            "sender_id": data["sender_id"],
+            "receiver_id": data["receiver_id"],
+            "amount": data["amount"],
+            "status": result["status"],
+            "provider": result["provider"],
+            "detail": result.get("detail", ""),
+        }
+    )
+
+    ok = result["status"] in ("approved", "succeeded", "paid", "completed")
+    return JSONResponse(status_code=201 if ok else 402, content=record)
 
 
 async def _json(request: Request) -> dict:

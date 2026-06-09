@@ -18,7 +18,18 @@ CURRENT_USER = {
     "avatar": "JL",
 }
 
+# The store / merchant the buyer pays at checkout (receiver of payments).
+MERCHANT = {
+    "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, "un_store")),
+    "name": "UN Store",
+}
+
 PORT = int(os.environ.get("PORT", "3000"))
+
+# External Payment service (un_store_back -> External Payment over HTTP/REST).
+# When unset, payments are simulated so the demo flow still works end to end.
+EXTERNAL_PAYMENT_URL = os.environ.get("EXTERNAL_PAYMENT_URL", "")
+PAYMENT_TIMEOUT = float(os.environ.get("PAYMENT_TIMEOUT", "8"))
 
 # Single SQLite file. Lives under /data so it can be mounted as a Docker volume.
 DB_PATH = os.environ.get(

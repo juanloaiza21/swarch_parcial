@@ -48,6 +48,9 @@ const API = {
   updateProduct: (id, data) =>
     request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
+
+  getStore: () => request('/store'),
+  createPayment: (data) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 window.API = API;

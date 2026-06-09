@@ -43,6 +43,21 @@ def migrate() -> None:
             );
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payments (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference   TEXT    NOT NULL,
+                sender_id   TEXT    NOT NULL,
+                receiver_id TEXT    NOT NULL,
+                amount      REAL    NOT NULL,
+                status      TEXT    NOT NULL DEFAULT 'pending',
+                provider    TEXT    NOT NULL DEFAULT '',
+                detail      TEXT    NOT NULL DEFAULT '',
+                created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+            """
+        )
 
 
 def seed() -> None:
@@ -175,3 +190,27 @@ def stats() -> dict:
             """
         ).fetchone()
         return dict(row)
+
+
+# ---- Payments -----------------------------------------------------------
+
+def create_payment(data: dict) -> dict:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO payments (reference, sender_id, receiver_id, amount, status, provider, detail)
+            VALUES (:reference, :sender_id, :receiver_id, :amount, :status, :provider, :detail)
+            """,
+            data,
+        )
+        new_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM payments WHERE id = ?", (new_id,)).fetchone()
+        return dict(row)
+
+
+def list_payments() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM payments ORDER BY created_at DESC, id DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]

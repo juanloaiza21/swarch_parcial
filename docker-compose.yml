@@ -1,29 +1,36 @@
-# Two images: a backend REST API (Node + SQLite) and a frontend SPA (nginx).
+# Architecture (per diagram):
+#   Web Browser --HTTP--> un_store_front --HTTP/REST--> un_store_back
+#       un_store_back --DB Connector--> un_store_db (SQLite volume)
+#       un_store_back --HTTP/REST--> External Payment (configurable)
 services:
-  backend:
+  un_store_back:
     build: ./backend
-    image: marketplace-backend
-    container_name: marketplace-backend
+    image: un_store_back
+    container_name: un_store_back
     environment:
       PORT: 3000
       DB_PATH: /data/marketplace.db
+      # Point this at the External Payment service. When empty, payments are
+      # simulated so the end-to-end flow still works.
+      EXTERNAL_PAYMENT_URL: ${EXTERNAL_PAYMENT_URL:-}
     volumes:
-      - marketplace-data:/data
+      - un_store_db:/data
     expose:
       - "3000"
     ports:
       - "3000:3000" # exposed for direct API access / debugging
     restart: unless-stopped
 
-  frontend:
+  un_store_front:
     build: ./frontend
-    image: marketplace-frontend
-    container_name: marketplace-frontend
+    image: un_store_front
+    container_name: un_store_front
     depends_on:
-      - backend
+      - un_store_back
     ports:
       - "8080:80"
     restart: unless-stopped
 
+# un_store_db: the single SQLite database file, persisted on a named volume.
 volumes:
-  marketplace-data:
+  un_store_db:
